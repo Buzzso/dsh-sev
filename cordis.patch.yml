@@ -1,0 +1,8 @@
+# dsh-sev bundle patch: inserts the dual-face plugin row into the web profile
+# roster. Node half (exports ".") runs in the host process (remote host
+# registry, SSH tunnel lifecycle, /api/dsh-sev routes); the dsh.client
+# declaration in package.json makes the browser half (exports "./client",
+# served at /plugins/dsh-sev/client.js) load in the web GUI.
+- insert:
+    - id: sev
+      name: 'dsh-sev'
