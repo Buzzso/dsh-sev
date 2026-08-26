@@ -1,6 +1,6 @@
 {
   "name": "dsh-sev",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Remote DSH host management for DeepSeek Harness: manage a headless dsh instance on your own server from the local GUI — SSH tunnels, live remote session list, one-click remote GUI. 远程 DSH 分身管理：本地 GUI 控制服务器上的 dsh 实例。",
   "type": "module",
   "main": "lib/index.js",
@@ -20,7 +20,8 @@
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --test --test-force-exit 'tests/*.test.js'",
-    "prepublishOnly": "npm run build && npm test"
+    "audit": "python3 scripts/security-audit.py",
+    "prepublishOnly": "npm run build && npm test && npm run audit"
   },
   "keywords": [
     "dsh",

@@ -17,6 +17,7 @@ const API = {
   tunnel: '/api/dsh-sev/tunnel',
   health: '/api/dsh-sev/health',
   sessions: '/api/dsh-sev/sessions',
+  task: '/api/dsh-sev/task',
 }
 
 type RemoteSession = {
@@ -52,6 +53,8 @@ function RemoteHostsPanel(): ReactNode {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [alias, setAlias] = useState('')
+  const [taskContent, setTaskContent] = useState('')
+  const [taskResult, setTaskResult] = useState<string | null>(null)
   const [active, setActive] = useState<string | null>(null)
   const [health, setHealth] = useState<Record<string, { hostUp: boolean; status?: number | string | null }>>({})
   const [sessions, setSessions] = useState<Record<string, RemoteSession[]>>({})
@@ -140,6 +143,30 @@ function RemoteHostsPanel(): ReactNode {
     await refresh()
   }
 
+  // M3: push a long task to an online host (creates a persistent remote session).
+  const pushTask = async () => {
+    const target = activeHost ?? hosts.find((h) => h.tunnel?.state === 'running') ?? hosts[0]
+    if (!target) { setTaskResult('❌ 没有可用的远程主机，先添加主机'); return }
+    if (!taskContent.trim()) return
+    try {
+      const d = await json(API.task, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: target.id, content: taskContent.trim() }),
+      })
+      if (d.sessionId) {
+        setTaskResult(`✅ 已推送到 ${target.name || target.alias}（会话 ${d.sessionId.slice(0, 12)}…），任务在服务器执行中`)
+        setTaskContent('')
+        setActive(target.id)
+        setTimeout(() => setTaskResult(null), 8000)
+      } else {
+        setTaskResult(`❌ ${d.error ?? '推送失败'}`)
+      }
+    } catch (e) {
+      setTaskResult(`❌ ${String(e)}`)
+    }
+  }
+
   const activeHost = hosts.find((h) => h.id === active)
 
   const styles = {
@@ -171,6 +198,21 @@ function RemoteHostsPanel(): ReactNode {
       }),
       createElement('button', { style: styles.addBtn, onClick: () => void addHost() }, '添加'),
     ),
+    createElement('div', { style: { ...styles.header, borderBottom: 'none', paddingTop: 6 } },
+      createElement('input', {
+        style: styles.input,
+        placeholder: '新建远程任务：把任务描述推给在线主机（长任务在服务器跑）',
+        value: taskContent,
+        onChange: (e: any) => setTaskContent(e.target.value),
+        onKeyDown: (e: any) => { if (e.key === 'Enter') void pushTask() },
+      }),
+      createElement('button', {
+        style: { ...styles.addBtn, background: 'var(--dsh-accent, #2f9e63)', flexShrink: 0 },
+        onClick: () => void pushTask(),
+        disabled: hosts.length === 0,
+      }, '推送任务'),
+    ),
+    taskResult ? createElement('div', { style: { ...styles.hint, color: taskResult.startsWith('✅') ? 'var(--dsw-alias-state-success-primary, #2f9e63)' : '#e07171' } }, taskResult) : null,
     error ? createElement('div', { style: styles.err }, error) : null,
     createElement('div', { style: styles.hint }, '主机注册在 ~/.dsh/remote-hosts.json；点击卡片打开远程 GUI'),
     createElement('div', { style: styles.list },

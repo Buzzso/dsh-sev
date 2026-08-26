@@ -255,3 +255,43 @@ test('sevRunTaskTool registers with the expected shape (name/parameters/output)'
   assert.equal(res.exitCode, 1)
   assert.match(res.output, /host not found/)
 })
+
+test('task route creates a remote session and queues the task (via fake remote)', async () => {
+  const remote = createServer((req, res) => {
+    let body = ''
+    req.on('data', (c) => { body += c })
+    req.on('end', () => {
+      const env = JSON.parse(body)
+      res.writeHead(200, { 'content-type': 'application/json' })
+      if (req.url === '/api/session.create') {
+        res.end(JSON.stringify({ type: 'server-response', rpcId: env.rpcId, result: { ok: true, value: { sessionId: 'sess-pushed-1' } } }))
+      } else if (req.url === '/api/session.prompt') {
+        assert.equal(env.payload.mode, 'queue')
+        assert.equal(env.payload.content[0].text, '做一件长任务')
+        res.end(JSON.stringify({ type: 'server-response', rpcId: env.rpcId, result: { ok: true, value: { accepted: true } } }))
+      } else {
+        res.writeHead(404); res.end()
+      }
+    })
+  })
+  await new Promise((resolve) => remote.listen(0, '127.0.0.1', resolve))
+  const remotePort = remote.address().port
+  try {
+    const registry = { hosts: [{ id: 'srv', alias: 'my-server' }], find: (id) => registry.hosts.find((h) => h.id === id), upsert() {}, remove() {} }
+    const routes = makeRoutes({
+      registry,
+      allocatePort: () => 5637,
+      getTunnel: () => ({ state: 'running', localPort: remotePort, remotePort: 3080, alias: 'my-server' }),
+    })
+    const taskRoute = routes.find((r) => r.path === API.task)
+    const res = fakeRes()
+    await taskRoute.handler(fakeReq({ method: 'POST', url: API.task, body: { id: 'srv', content: '做一件长任务' } }), res)
+    assert.equal(res.out.status, 200)
+    const data = JSON.parse(res.out.body)
+    assert.equal(data.sessionId, 'sess-pushed-1')
+    assert.equal(data.accepted, true)
+  } finally {
+    remote.closeAllConnections()
+    await new Promise((resolve) => remote.close(resolve))
+  }
+})
