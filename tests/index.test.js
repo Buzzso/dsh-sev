@@ -330,3 +330,41 @@ test('archive route archives a remote session via workspace.archiveSession', asy
     await new Promise((resolve) => remote.close(resolve))
   }
 })
+
+test('sessions route hides archived sessions', async () => {
+  const remote = createServer((req, res) => {
+    let body = ''
+    req.on('data', (c) => { body += c })
+    req.on('end', () => {
+      const env = JSON.parse(body)
+      res.writeHead(200, { 'content-type': 'application/json' })
+      if (req.url === '/api/session.list') {
+        res.end(JSON.stringify({ type: 'server-response', rpcId: env.rpcId, result: { ok: true, value: { items: [
+          { sessionId: 'sess-active', running: true, blank: false, updatedAt: 1, cwd: null, projections: { values: { title: '活跃' } } },
+          { sessionId: 'sess-archived', running: false, blank: false, updatedAt: 1, cwd: null, projections: { values: { title: '已归档' } } },
+        ] } } }))
+      } else { res.writeHead(404); res.end() }
+    })
+  })
+  await new Promise((resolve) => remote.listen(0, '127.0.0.1', resolve))
+  const remotePort = remote.address().port
+  try {
+    const registry = { hosts: [{ id: 'srv', alias: 'my-server' }], find: (id) => registry.hosts.find((h) => h.id === id), upsert() {}, remove() {} }
+    const archived = new Set(['sess-archived'])
+    const routes = makeRoutes({
+      registry,
+      allocatePort: () => 5637,
+      getTunnel: () => ({ state: 'running', localPort: remotePort, remotePort: 3080, alias: 'my-server' }),
+      getArchived: () => archived,
+    })
+    const sessionsRoute = routes.find((r) => r.path === API.sessions)
+    const res = fakeRes()
+    await sessionsRoute.handler(fakeReq({ url: `${API.sessions}?id=srv` }), res)
+    const { sessions } = JSON.parse(res.out.body)
+    assert.equal(sessions.length, 1)
+    assert.equal(sessions[0].sessionId, 'sess-active')
+  } finally {
+    remote.closeAllConnections()
+    await new Promise((resolve) => remote.close(resolve))
+  }
+})

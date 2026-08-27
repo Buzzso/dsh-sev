@@ -1,6 +1,6 @@
 {
   "name": "dsh-sev",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Remote DSH host management for DeepSeek Harness: manage a headless dsh instance on your own server from the local GUI — SSH tunnels, live remote session list, one-click remote GUI. 远程 DSH 分身管理：本地 GUI 控制服务器上的 dsh 实例。",
   "type": "module",
   "main": "lib/index.js",
