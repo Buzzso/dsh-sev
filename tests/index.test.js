@@ -295,3 +295,38 @@ test('task route creates a remote session and queues the task (via fake remote)'
     await new Promise((resolve) => remote.close(resolve))
   }
 })
+
+test('archive route archives a remote session via workspace.archiveSession', async () => {
+  const remote = createServer((req, res) => {
+    let body = ''
+    req.on('data', (c) => { body += c })
+    req.on('end', () => {
+      const env = JSON.parse(body)
+      res.writeHead(200, { 'content-type': 'application/json' })
+      if (req.url === '/api/workspace.archiveSession') {
+        assert.equal(env.payload.sessionId, 'sess-arch-1')
+        res.end(JSON.stringify({ type: 'server-response', rpcId: env.rpcId, result: { ok: true, value: { archivedSessionIds: ['sess-arch-1'] } } }))
+      } else {
+        res.writeHead(404); res.end()
+      }
+    })
+  })
+  await new Promise((resolve) => remote.listen(0, '127.0.0.1', resolve))
+  const remotePort = remote.address().port
+  try {
+    const registry = { hosts: [{ id: 'srv', alias: 'my-server' }], find: (id) => registry.hosts.find((h) => h.id === id), upsert() {}, remove() {} }
+    const routes = makeRoutes({
+      registry,
+      allocatePort: () => 5637,
+      getTunnel: () => ({ state: 'running', localPort: remotePort, remotePort: 3080, alias: 'my-server' }),
+    })
+    const archiveRoute = routes.find((r) => r.path === API.archive)
+    const res = fakeRes()
+    await archiveRoute.handler(fakeReq({ method: 'POST', url: API.archive, body: { id: 'srv', sessionId: 'sess-arch-1' } }), res)
+    assert.equal(res.out.status, 200)
+    assert.deepEqual(JSON.parse(res.out.body).archivedSessionIds, ['sess-arch-1'])
+  } finally {
+    remote.closeAllConnections()
+    await new Promise((resolve) => remote.close(resolve))
+  }
+})

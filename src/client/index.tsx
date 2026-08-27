@@ -18,6 +18,7 @@ const API = {
   health: '/api/dsh-sev/health',
   sessions: '/api/dsh-sev/sessions',
   task: '/api/dsh-sev/task',
+  archive: '/api/dsh-sev/session-archive',
 }
 
 type RemoteSession = {
@@ -141,6 +142,21 @@ function RemoteHostsPanel(): ReactNode {
     await json(`${API.host}?id=${encodeURIComponent(h.id)}`, { method: 'DELETE' })
     if (active === h.id) setActive(null)
     await refresh()
+  }
+
+  // Archive (delete from the active list) a remote session.
+  const archiveSession = async (h: RemoteHost, s: RemoteSession) => {
+    if (!window.confirm(`归档远程会话「${friendlyTitle(s)}」？
+（可从远程 GUI 的归档区找回）`)) return
+    try {
+      const d = await json(API.archive, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: h.id, sessionId: s.sessionId }),
+      })
+      if (d.ok) { setSessions((prev) => ({ ...prev, [h.id]: (prev[h.id] ?? []).filter((x) => x.sessionId !== s.sessionId) })) }
+      else setError(d.error ?? '归档失败')
+    } catch (e) { setError(String(e)) }
   }
 
   // M3: push a long task to an online host (creates a persistent remote session).
@@ -440,6 +456,11 @@ function RemoteSessionsSection(props: {
             createElement('span', { style: { width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: s.running ? '#3ecf6a' : muted } }),
             createElement('span', { style: { flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, friendlyTitle(s)),
             createElement('span', { style: { fontSize: 12, fontWeight: 500, color: '#5d7696', flexShrink: 0 } }, s.running ? '运行中' : relTime(s.updatedAt)),
+            createElement('button', {
+              style: { border: 'none', background: 'transparent', color: '#e07171', cursor: 'pointer', fontSize: 12, padding: '0 2px', flexShrink: 0 },
+              title: '归档此会话',
+              onClick: (e: any) => { e.stopPropagation(); void archiveSession(h, s) },
+            }, '🗑'),
           ),
         ),
       )
