@@ -260,11 +260,16 @@ function RemoteHostsPanel(): ReactNode {
             : null,
           running && hostSessions.length > 0
             ? createElement('div', { style: { marginTop: 4, display: 'flex', flexDirection: 'column', gap: 3 } },
-                hostSessions.slice(0, 4).map((s) => createElement('div', { key: s.sessionId, style: styles.row },
+                hostSessions.slice(0, 4).map((s) => createElement('div', { key: s.sessionId, style: { ...styles.row, cursor: 'default' } },
                   createElement('span', { style: { ...styles.dot, background: s.running ? '#3ecf6a' : '#9a9a9a' } }),
-                  createElement('span', { style: { fontSize: 11, opacity: .8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
-                    s.title ?? s.sessionId.slice(0, 12),
+                  createElement('span', { style: { flex: 1, fontSize: 11, opacity: .8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+                    friendlyTitle(s),
                   ),
+                  createElement('button', {
+                    style: { border: 'none', background: 'transparent', color: '#e07171', cursor: 'pointer', fontSize: 12, padding: '0 2px', flexShrink: 0 },
+                    title: '归档此会话',
+                    onClick: (e: any) => { e.stopPropagation(); void archiveSession(h, s) },
+                  }, '🗑'),
                 )),
                 hostSessions.length > 4
                   ? createElement('div', { style: { fontSize: 10, opacity: .5 } }, `还有 ${hostSessions.length - 4} 个…`)
