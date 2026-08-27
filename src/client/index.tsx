@@ -146,17 +146,9 @@ function RemoteHostsPanel(): ReactNode {
 
   // Archive (delete from the active list) a remote session.
   const archiveSession = async (h: RemoteHost, s: RemoteSession) => {
-    if (!window.confirm(`归档远程会话「${friendlyTitle(s)}」？
-（可从远程 GUI 的归档区找回）`)) return
-    try {
-      const d = await json(API.archive, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: h.id, sessionId: s.sessionId }),
-      })
-      if (d.ok) { setSessions((prev) => ({ ...prev, [h.id]: (prev[h.id] ?? []).filter((x) => x.sessionId !== s.sessionId) })) }
-      else setError(d.error ?? '归档失败')
-    } catch (e) { setError(String(e)) }
+    if (await archiveRemoteSession(h, s)) {
+      setSessions((prev) => ({ ...prev, [h.id]: (prev[h.id] ?? []).filter((x) => x.sessionId !== s.sessionId) }))
+    }
   }
 
   // M3: push a long task to an online host (creates a persistent remote session).
@@ -418,6 +410,29 @@ function friendlyTitle(s: RemoteSession): string {
   return s.sessionId.slice(0, 8)
 }
 
+/** Module-level archive helper shared by the panel and the left mixed list.
+ *  Confirms, calls the archive route, and notifies listeners so every view
+ *  (panel + mixed list) drops the session immediately. */
+async function archiveRemoteSession(h: { id: string; name?: string; alias?: string }, s: RemoteSession): Promise<boolean> {
+  if (!window.confirm(`归档远程会话「${friendlyTitle(s)}」？\n（可从远程 GUI 的归档区找回）`)) return false
+  try {
+    const d = await json(API.archive, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: h.id, sessionId: s.sessionId }),
+    })
+    if (d.ok) {
+      window.dispatchEvent(new CustomEvent('dsh-sev:sessions-changed', { detail: { hostId: h.id, sessionId: s.sessionId } }))
+      return true
+    }
+    console.error('[dsh-sev] archive failed:', d.error)
+    return false
+  } catch (e) {
+    console.error('[dsh-sev] archive error:', e)
+    return false
+  }
+}
+
 // Inline styles only — DSH's CSP blocks runtime-injected <style> tags, so any
 // styling must ride on React style props (verified in a live GUI).
 function RemoteSessionsSection(props: {
@@ -464,7 +479,7 @@ function RemoteSessionsSection(props: {
             createElement('button', {
               style: { border: 'none', background: 'transparent', color: '#e07171', cursor: 'pointer', fontSize: 12, padding: '0 2px', flexShrink: 0 },
               title: '归档此会话',
-              onClick: (e: any) => { e.stopPropagation(); void archiveSession(h, s) },
+              onClick: (e: any) => { e.stopPropagation(); void archiveRemoteSession(h, s) },
             }, '🗑'),
           ),
         ),
@@ -505,10 +520,18 @@ function mountRemoteSessionsSection(): () => void {
   }
   const timer = window.setInterval(() => { void poll() }, 10000)
   void poll()
+  const onChanged = () => { void poll() }
+  window.addEventListener('dsh-sev:sessions-changed', onChanged)
   const obs = new MutationObserver(() => { place() })
   obs.observe(document.body, { childList: true, subtree: true })
   place()
-  return () => { window.clearInterval(timer); obs.disconnect(); root.unmount(); host.remove() }
+  return () => {
+    window.clearInterval(timer)
+    window.removeEventListener('dsh-sev:sessions-changed', onChanged)
+    obs.disconnect()
+    root.unmount()
+    host.remove()
+  }
 }
 
 // ── plugin entry ────────────────────────────────────────────────────────────
